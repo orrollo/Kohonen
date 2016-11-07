@@ -1,204 +1,186 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Data;
 using System.Drawing;
-using System.Linq;
-using System.Text;
 using System.Windows.Forms;
-using System.Drawing.Imaging;
 using System.Threading;
 
 namespace Kohonen
 {
-    public partial class Form1 : Form
+	public partial class Form1 : Form
     {
-        List<List<Elem>> map;
         List<Elem> ControlSet;
+
+	    KohonenMap kohMap;
+
         Bitmap bm;
-        double radius;
-        int IterationCount = 2000;
-        Thread newThread1;
-        Thread newThread2;
-        const double eps1 = 0.0005;
-        const double eps2 = 0.005;
-        double value1 = 0.001;
-        double value2 = 1.0;
+
+        Thread _newThread1;
+        Thread _newThread2;
+
+		//const double eps2 = 0.005;
+
+		//double value1 = 0.001;
+		//double value2 = 1.0;
 
         public Form1()
         {
-            InitializeComponent();
-            bm = new Bitmap(pictureBox1.Width, pictureBox1.Height);
-            pictureBox1.Image = bm;
-            InitializeMap();
-            InitializeControlSet();
-            radius = Math.Sqrt(Math.Pow(Math.Max(pictureBox1.Height, pictureBox1.Width) / 2, 2) *2) / 2;
+	        InitializeComponent();
+	        InitializeCustom();
         }
 
-        public void InitializeMap()
-        {
-            Random r = new Random();
-            map = new List<List<Elem>>();
-            List<Elem> temp = new List<Elem>();
-            for(int i = 0; i < pictureBox1.Height; i++)
-            {
-                for(int j = 0; j < pictureBox1.Width; j++)
-                {
-                    Elem e = new Elem();
-                    for (int k = 0; k < 3; k++)
-                        e.Insert(r.Next(0, 255), k);
-                    temp.Add(e);
-                }
-                map.Add(new List<Elem>(temp));
-                temp.Clear();
-            }
-        }
+	    private void InitializeCustom()
+	    {
+			InitializeImage();
+			
+			Elem.ElemSize = 3;
+			ControlSet = InitializeControlSet();
+		    kohMap = new KohonenMap(pictureBox1.Width, pictureBox1.Height);
+			
+			//map = KohonenMap.InitializeMap(width, height);
+			//var maxSize = Math.Max(height, width);
+		    //radius = Math.Sqrt(Math.Pow(maxSize >> 1, 2)*2)/2;
+	    }
 
-        public void InitializeControlSet()
+	    private void InitializeImage()
+	    {
+		    bm = new Bitmap(pictureBox1.Width, pictureBox1.Height);
+		    pictureBox1.Image = bm;
+	    }
+
+	    public List<Elem> InitializeControlSet()
         {
-            ControlSet = new List<Elem>();
+            var set = new List<Elem>();
             //красный
-            ControlSet.Add(new Elem(new int[] {255, 0, 0}));
+            set.Add(new Elem(255, 0, 0));
             //зеленый
-            ControlSet.Add(new Elem(new int[] { 0, 128, 0 }));
+            set.Add(new Elem(0, 128, 0));
             //синий
-            ControlSet.Add(new Elem(new int[] { 0, 0, 255 }));
+            set.Add(new Elem(0, 0, 255));
             //темно-зеленый
-            ControlSet.Add(new Elem(new int[] { 0, 100, 0 }));
+            set.Add(new Elem(0, 100, 0));
             //темно-синий
-            ControlSet.Add(new Elem(new int[] { 0, 0, 139 }));
+            set.Add(new Elem(0, 0, 139));
             //желтый
-            ControlSet.Add(new Elem(new int[] { 255, 255, 0 }));
+            set.Add(new Elem(255, 255, 0));
             //оранжевый
-            ControlSet.Add(new Elem(new int[] { 255, 165, 0 }));
+            set.Add(new Elem(255, 165, 0));
             //фиолетовый
-            ControlSet.Add(new Elem(new int[] { 128, 0, 128 }));
+            set.Add(new Elem(128, 0, 128));
+		    return set;
         }
 
         public void FillNetwork()
         {
-            Random r = new Random();
-            double current_radius = radius;
-            for(int i = 0; i < IterationCount; i++)
-            {
-                int k = /*r.Next(0, 7)*/ i % 8;
-                Elem ControlElem = ControlSet[k];
-
-                //ищем BMU
-                int best_i = -1, best_j = -1, minX = Int32.MaxValue, minY = Int32.MaxValue, minZ = Int32.MaxValue;
-                //int start_j = r.Next(0, map.Count - 1);
-                //int start_m = r.Next(0, map[start_j].Count - 1);
-                List<Tuple<int, int>> bmus = new List<Tuple<int, int>>(1000);
-                for(int j = 0; j < map.Count; j++)
-                    for (int m = 0; m < map[j].Count; m++)
-                    {
-                        int x = Math.Abs(map[j][m].Vector[0] - ControlElem.Vector[0]);
-                        int y = Math.Abs(map[j][m].Vector[1] - ControlElem.Vector[1]);
-                        int z = Math.Abs(map[j][m].Vector[2] - ControlElem.Vector[2]);
-                        //int sum = x + y + z;
-                        if (minX >= x && minY >= y && minZ >= z)
-                        {
-                            if (x <= 0 && x <= 10 && y <= 0 && y <= 10 && z <= 0 && z <= 10)
-                                bmus.Add(new Tuple<int, int>(j, m));
-                            minX = x;
-                            minY = y;
-                            minZ = z;
-                            best_i = j;
-                            best_j = m;
-                        }
-                    }
-
-                if(bmus.Count != 0)
-                {
-                    int ind = r.Next(0, bmus.Count - 1);
-                    best_i = bmus[ind].Item1;
-                    best_j = bmus[ind].Item2;
-                }
-                for (int j = 0; j < map.Count; j++)
-                    for (int m = 0; m < map[j].Count; m++)
-                    {
-                        if (j == best_i && m == best_j)
-                            continue;
-                        double distance = Math.Sqrt(Math.Pow(j - best_i, 2) + Math.Pow(m - best_j, 2));
-                        if (distance < current_radius)
-                        {
-                            //функция степени соседства 0 < h < 1
-                            //double h = 1 / (1 + 0.5* distance) /* (current_radius * 0.005)*/;
-                            //double h = distance * (0.001);
-                            //double h = value1;
-                            double h = Math.Exp(-distance*0.03) /*- Math.Log(current_radius)*0.0001*/;
-                            int red = map[j][m].Vector[0];
-                            int green = map[j][m].Vector[1];
-                            int blue = map[j][m].Vector[2];
-                            red = (int)Math.Ceiling(red + h * (ControlElem.Vector[0] - red));
-                            green = (int)Math.Ceiling(green + h * (ControlElem.Vector[1] - green));
-                            blue = (int)Math.Ceiling(blue + h * (ControlElem.Vector[2] - blue));
-
-                            if (red == Int32.MinValue || green == Int32.MinValue || blue == Int32.MinValue)
-                                continue;
-
-                            map[j][m].Vector = new int[] { red, green, blue };
-                        }
-                    }
-                value1 -= eps1;
-                current_radius -= (double)IterationCount / (radius * 100);
-            }
+	        kohMap.FillNetwork(ControlSet);
         }
 
-        public void DrawMap()
+	    public void DrawMap()
         {
 
-            PBInvalidateDelegate PBI = new PBInvalidateDelegate( PBInvalidate);
-            GetMapDelegate gmd = new GetMapDelegate( GetMap);
-            SetBitmapDelegate sbd = new SetBitmapDelegate(SetBitmap);
-            GetPBWidthDelegate PBwidth = new GetPBWidthDelegate(GetPBWidth);
-            GetPBHeightDelegate PBheight = new GetPBHeightDelegate(GetPBHeight);
-            int width = (int)Invoke(PBwidth);
-            int height = (int)Invoke(PBheight);
+            var PBI = new PBInvalidateDelegate( PBInvalidate);
+            var gmd = new GetMapDelegate( GetMap);
+            var sbd = new SetBitmapDelegate(SetBitmap);
+			var getPBWidth = new GetPBWidthDelegate(GetPBWidth);
+            var getPBheight = new GetPBHeightDelegate(GetPBHeight);
+		    var getMutex = new GetMutexDelegate(GetMutex);
+
+			var width = (int)Invoke(getPBWidth);
+			var height = (int)Invoke(getPBheight);
+
             while (true)
             {
-                Bitmap b = new Bitmap(width, height);
-                List<List<Elem>> curMap = Invoke(gmd) as List<List<Elem>>;
-                for (int i = 0; i < curMap.Count; i++)
-                    for (int j = 0; j < curMap[i].Count; j++)
-                        b.SetPixel(j, i, Color.FromArgb(curMap[i][j].Vector[0], curMap[i][j].Vector[1], curMap[i][j].Vector[2]));
-                Invoke(sbd, b);
-                Invoke(PBI);
+                var bitmap = new Bitmap(width, height);
+                var curMap = Invoke(gmd) as List<List<Elem>>;
+	            var mutex = Invoke(getMutex) as Mutex;
+				//lock (curMap)
+				if (mutex.WaitOne(5000))
+				{
+					try
+					{
+						for (int i = 0; i < curMap.Count; i++)
+						{
+							var list = curMap[i];
+							for (int j = 0; j < list.Count; j++)
+							{
+								var red = list[j].Vector[0];
+								var green = list[j].Vector[1];
+								var blue = list[j].Vector[2];
+								var color = Color.FromArgb(red, green, blue);
+								bitmap.SetPixel(j, i, color);
+							}
+						}
+					}
+					finally
+					{
+						mutex.ReleaseMutex();
+					}
+					Invoke(sbd, bitmap);
+					Invoke(PBI);
+				}
+				//Thread.Sleep(0);
             }
         }
 
-        delegate void PBInvalidateDelegate();
+		private Mutex GetMutex()
+		{
+			return kohMap.mapMutex;
+		}
+
+		delegate void PBInvalidateDelegate();
         delegate List<List<Elem>> GetMapDelegate();
         delegate void SetBitmapDelegate(Bitmap b);
         delegate int GetPBWidthDelegate();
         delegate int GetPBHeightDelegate();
+		delegate Mutex GetMutexDelegate();
 
-        public void PBInvalidate()
-        {
-            if(pictureBox1 != null)
-                pictureBox1.Invalidate();
-        }
+	    public void PBInvalidate()
+	    {
+		    if (pictureBox1 == null) return;
+		    if (pictureBox1.InvokeRequired)
+		    {
+			    var method = new Action(() => pictureBox1.Invalidate());
+			    pictureBox1.Invoke(method);
+		    }
+		    else
+		    {
+				pictureBox1.Invalidate();
+		    }
+			
+	    }
 
-        public List<List<Elem>> GetMap()
+	    public List<List<Elem>> GetMap()
         {
-            return map;
+            return kohMap.Map;
         }
 
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
-            if(newThread1 != null)
-                newThread1.Abort();
-            if(newThread2 != null)
-                newThread2.Abort();
+            if(_newThread1 != null)
+                _newThread1.Abort();
+            if(_newThread2 != null)
+                _newThread2.Abort();
         }
 
-        private void SetBitmap(Bitmap b)
-        {
-            bm = new Bitmap(b);
-            pictureBox1.Image = bm;
-        }
+	    private void SetBitmap(Bitmap b)
+	    {
+		    if (pictureBox1.InvokeRequired)
+		    {
+			    var fn = new Action(() =>
+				    {
+					    bm = new Bitmap(b);
+					    pictureBox1.Image = bm;
+				    });
+			    pictureBox1.Invoke(fn);
+		    }
+		    else
+		    {
+				bm = new Bitmap(b);
+			    pictureBox1.Image = bm;
+		    }
+	    }
 
-        private int GetPBWidth()
+	    private int GetPBWidth()
         {
             return pictureBox1.Width;
         }
@@ -208,57 +190,63 @@ namespace Kohonen
             return pictureBox1.Height;
         }
 
-        private void toolStripMenuItem1_Click(object sender, EventArgs e)
+        private void tsStartClick(object sender, EventArgs e)
         {
-            toolStripMenuItem1.Enabled = false;
-            newThread1 = new Thread(new ThreadStart(DrawMap));
-            newThread1.IsBackground = true;
-            newThread1.Start();
-            newThread2 = new Thread(new ThreadStart(FillNetwork));
-            newThread2.IsBackground = true;
-            newThread2.Start();
+	        tsStart.Enabled = false;
+			kohMap = new KohonenMap(pictureBox1.Width, pictureBox1.Height);
+			CreateThreads();
         }
 
-        private void pictureBox1_MouseClick(object sender, MouseEventArgs e)
+	    private void CreateThreads()
+	    {
+		    _newThread1 = new Thread(DrawMap) {IsBackground = true};
+		    _newThread1.Start();
+		    _newThread2 = new Thread(FillNetwork) {IsBackground = true};
+		    _newThread2.Start();
+	    }
+
+	    private void pictureBox1_MouseClick(object sender, MouseEventArgs e)
         {
             if (e.Button == MouseButtons.Right)
             {
-                contextMenuStrip1.Show(Cursor.Position);
+                menuStrip.Show(Cursor.Position);
             }
         }
 
-        private void toolStripMenuItem2_Click(object sender, EventArgs e)
+        private void tsRepeatClick(object sender, EventArgs e)
         {
-            if (newThread1 != null)
-                newThread1.Abort();
-            if (newThread2 != null)
-                newThread2.Abort();
-            InitializeMap();
+            KillThreads();
+	        //map = KohonenMap.InitializeMap(pictureBox1.Width, pictureBox1.Height);
+			kohMap = new KohonenMap(pictureBox1.Width, pictureBox1.Height);
 
-            newThread1 = new Thread(new ThreadStart(DrawMap));
-            newThread1.IsBackground = true;
-            newThread1.Start();
-            newThread2 = new Thread(new ThreadStart(FillNetwork));
-            newThread2.IsBackground = true;
-            newThread2.Start();
+			CreateThreads();
+			//newThread1 = new Thread(DrawMap) { IsBackground = true };
+			//newThread1.Start();
+			//newThread2 = new Thread(FillNetwork) {IsBackground = true};
+			//newThread2.Start();
         }
 
-        private void остановитьToolStripMenuItem_Click(object sender, EventArgs e)
+	    private void KillThreads()
+	    {
+		    if (_newThread1 != null) _newThread1.Abort();
+		    if (_newThread2 != null) _newThread2.Abort();
+	    }
+
+	    private void tsStopClick(object sender, EventArgs e)
         {
-            if (newThread1 != null)
-                newThread1.Abort();
-            if (newThread2 != null)
-                newThread2.Abort();
+			//if (newThread1 != null) newThread1.Abort();
+			//if (newThread2 != null) newThread2.Abort();
+			KillThreads();
+		}
+
+        private void tsSaveClick(object sender, EventArgs e)
+        {
+            saveFile.ShowDialog();
         }
 
-        private void сохранитьToolStripMenuItem_Click(object sender, EventArgs e)
+        private void saveFileOk(object sender, CancelEventArgs e)
         {
-            saveFileDialog1.ShowDialog();
-        }
-
-        private void saveFileDialog1_FileOk(object sender, CancelEventArgs e)
-        {
-            bm.Save(saveFileDialog1.FileName);
+            bm.Save(saveFile.FileName);
         }
     }
 }
